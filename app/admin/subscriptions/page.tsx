@@ -15,11 +15,9 @@ import {
   Search,
   Filter,
   Eye,
-  CreditCard,
   Crown,
   DollarSign,
   TrendingUp,
-  Calendar,
   Users,
   Download,
   RefreshCw,
@@ -147,7 +145,7 @@ export default function SubscriptionsPage() {
     .filter(sub => sub.status === 'active')
     .reduce((acc, sub) => acc + sub.price, 0);
 
-  const SubscriptionDetailDialog = ({ subscription }: { subscription: any }) => (
+  const SubscriptionDetailDialog = ({ subscription }: { subscription: { user: { name: string; email: string; avatar: string }; plan: string; status: string; price: number; billingCycle: string; renewsAt: string; paymentMethod?: string } }) => (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
@@ -158,7 +156,7 @@ export default function SubscriptionsPage() {
         <DialogHeader>
           <DialogTitle>Subscription Details</DialogTitle>
           <DialogDescription>
-            Manage {subscription.user.name}'s subscription
+            Manage {subscription.user.name}&apos;s subscription
           </DialogDescription>
         </DialogHeader>
         
@@ -199,7 +197,7 @@ export default function SubscriptionsPage() {
           <div>
             <h5 className="font-medium mb-1">Payment Method</h5>
             <p className="text-sm text-muted-foreground">
-              •••• {subscription.paymentMethod.split('_')[2]}
+              •••• {subscription.paymentMethod?.split('_')[2] || 'N/A'}
             </p>
           </div>
           

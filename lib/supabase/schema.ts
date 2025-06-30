@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import {
   pgTable,
   uuid,
@@ -8,7 +10,6 @@ import {
   integer,
   jsonb,
   pgEnum,
-  index,
   real
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";

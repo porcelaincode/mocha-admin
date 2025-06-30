@@ -7,18 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Shield, 
+import {
   Eye, 
-  AlertTriangle, 
   CheckCircle, 
   XCircle,
-  Settings,
   Bot,
-  Users,
-  Image as ImageIcon,
-  MessageSquare,
-  Filter
 } from "lucide-react";
 
 export default function ModerationPage() {

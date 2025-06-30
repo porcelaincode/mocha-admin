@@ -15,9 +15,6 @@ import {
   Check, 
   X,
   AlertTriangle,
-  User,
-  MessageSquare,
-  Image as ImageIcon,
   Shield
 } from "lucide-react";
 

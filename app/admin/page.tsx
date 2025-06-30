@@ -8,14 +8,11 @@ import {
   Users,
   Heart,
   MessageCircle,
-  CreditCard,
   TrendingUp,
   TrendingDown,
   UserPlus,
   Activity,
   DollarSign,
-  Eye,
-  Zap,
   Shield
 } from "lucide-react";
 
@@ -51,7 +48,7 @@ function StatCard({ title, value, change, icon: Icon, trend }: {
   title: string;
   value: string | number;
   change?: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   trend?: "up" | "down";
 }) {
   return (
@@ -86,7 +83,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Welcome back! Here's what's happening with your dating app.
+          Welcome back! Here&apos;s what&apos;s happening with your dating app.
         </p>
       </div>
 

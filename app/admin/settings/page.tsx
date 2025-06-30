@@ -9,15 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Settings, 
   Shield, 
-  Bell, 
   Database,
-  Mail,
-  Key,
   Globe,
   Users,
-  CreditCard,
   Save
 } from "lucide-react";
 

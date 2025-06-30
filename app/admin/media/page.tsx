@@ -10,8 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Search, 
-  Filter, 
+  Search,
   Eye, 
   Download, 
   Trash2, 
@@ -19,16 +18,11 @@ import {
   Check, 
   X,
   Image as ImageIcon,
-  Video,
-  Calendar,
-  User,
   AlertTriangle,
   Shield,
   Play,
-  Pause,
-  Volume2,
-  VolumeX
 } from "lucide-react";
+import Image from "next/image";
 
 // Mock data for media content
 const mockMedia = [
@@ -102,7 +96,6 @@ export default function MediaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const filteredMedia = mockMedia.filter(media => {
     const matchesSearch = media.userName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -260,7 +253,7 @@ export default function MediaPage() {
             {filteredMedia.map((media) => (
               <Card key={media.id} className="overflow-hidden">
                 <div className="relative aspect-[3/4] bg-muted">
-                  <img 
+                  <Image 
                     src={media.thumbnail} 
                     alt="Media content"
                     className="w-full h-full object-cover"
@@ -336,7 +329,7 @@ export default function MediaPage() {
                         </DialogHeader>
                         <div className="space-y-4">
                           <div className="aspect-[3/4] bg-muted rounded-lg overflow-hidden">
-                            <img 
+                            <Image 
                               src={media.url} 
                               alt="Media content"
                               className="w-full h-full object-cover"
@@ -433,7 +426,7 @@ export default function MediaPage() {
                 {filteredMedia.map((media) => (
                   <div key={media.id} className="p-4 flex items-center space-x-4">
                     <div className="relative w-16 h-20 bg-muted rounded overflow-hidden flex-shrink-0">
-                      <img 
+                      <Image 
                         src={media.thumbnail} 
                         alt="Media content"
                         className="w-full h-full object-cover"
@@ -488,7 +481,7 @@ export default function MediaPage() {
                           </DialogHeader>
                           <div className="space-y-4">
                             <div className="aspect-[3/4] bg-muted rounded-lg overflow-hidden">
-                              <img 
+                              <Image 
                                 src={media.url} 
                                 alt="Media content"
                                 className="w-full h-full object-cover"

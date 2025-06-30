@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,12 +11,7 @@ import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Activity,
-  Eye,
-  Download,
-  Calendar,
-  MapPin,
-  Clock
+  Download
 } from "lucide-react";
 
 // Mock analytics data
@@ -69,7 +63,7 @@ function StatCard({ title, value, change, icon: Icon, trend }: {
   title: string;
   value: string | number;
   change?: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   trend?: "up" | "down";
 }) {
   return (
@@ -162,7 +156,7 @@ export default function AnalyticsPage() {
                 <CardDescription>Monthly user acquisition over time</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {analyticsData.userGrowth.map((data, index) => (
+                {analyticsData.userGrowth.map((data) => (
                   <div key={data.month} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span>{data.month}</span>

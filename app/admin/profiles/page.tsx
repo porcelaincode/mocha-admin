@@ -12,21 +12,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { 
   Search, 
-  Filter, 
   Eye, 
   Edit, 
   Shield, 
   Camera, 
   MapPin, 
   Heart,
-  Star,
   Users,
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Image as ImageIcon,
-  MoreHorizontal
+  Image as ImageIcon
 } from "lucide-react";
+import Image from "next/image";
 
 // Mock data for user profiles
 const mockProfiles = [
@@ -99,7 +97,6 @@ export default function ProfilesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [verificationFilter, setVerificationFilter] = useState("all");
-  const [selectedProfile, setSelectedProfile] = useState(null);
 
   const filteredProfiles = mockProfiles.filter(profile => {
     const matchesSearch = profile.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -182,7 +179,7 @@ export default function ProfilesPage() {
           <CardContent>
             <div className="text-2xl font-bold">1,234</div>
             <p className="text-xs text-muted-foreground">
-              <50% completion rate
+              &lt;50% completion rate
             </p>
           </CardContent>
         </Card>
@@ -277,7 +274,7 @@ export default function ProfilesPage() {
                   </DialogTrigger>
                   <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>{profile.name}'s Profile</DialogTitle>
+                      <DialogTitle>{profile.name}&apos;s Profile</DialogTitle>
                       <DialogDescription>
                         Detailed profile information and management options
                       </DialogDescription>
@@ -346,7 +343,7 @@ export default function ProfilesPage() {
                           <div className="grid grid-cols-3 gap-4">
                             {profile.photos.map((photo, index) => (
                               <div key={index} className="relative aspect-square">
-                                <img 
+                                <Image
                                   src={photo} 
                                   alt={`Photo ${index + 1}`}
                                   className="w-full h-full object-cover rounded-lg border"
