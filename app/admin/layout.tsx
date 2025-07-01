@@ -20,7 +20,8 @@ import {
   Home,
   UserCheck,
   Flag,
-  Bell
+  Bell,
+  ArrowLeftRight
 } from "lucide-react";
 
 const sidebarItems = [
@@ -43,6 +44,11 @@ const sidebarItems = [
     title: "Matches",
     href: "/admin/matches",
     icon: Heart,
+  },
+  {
+    title: "Swipes",
+    href: "/admin/swipes",
+    icon: ArrowLeftRight,
   },
   {
     title: "Messages",

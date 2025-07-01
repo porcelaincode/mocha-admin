@@ -10,10 +10,13 @@ import {
   integer,
   jsonb,
   pgEnum,
-  real
+  real,
+  unique,
+  index,
+  check
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { z } from "zod";
 
 // Validate UUID
@@ -40,6 +43,8 @@ const swipeActionEnum = pgEnum("swipe_action", ["like", "pass", "superlike"]);
 const messageTypeEnum = pgEnum("message_type", ["text", "image", "gif", "emoji", "location"]);
 const messageStatusEnum = pgEnum("message_status", ["sending", "sent", "delivered", "read"]);
 const chatRequestStatusEnum = pgEnum("chat_request_status", ["pending", "accepted", "declined", "expired"]);
+
+const swipeStatusEnum = pgEnum("swipe_status", ["active", "expired", "revoked"]);
 
 // OTP Verification table for phone-based authentication
 export const otpVerifications = pgTable("otp_verifications", {
@@ -97,6 +102,8 @@ export const users = pgTable("users", {
   age: integer("age"), // Age with minimum 18 constraint (check constraint will be added in migration)
   bio: text("bio"), // Short user bio
   location: text("location"), // City or region (can be upgraded to GEOGRAPHY later)
+  latitude: real("latitude"), // GPS latitude coordinate
+  longitude: real("longitude"), // GPS longitude coordinate
   verified: boolean("verified").notNull().default(false), // Verification status
   interests: jsonb("interests").notNull().default("[]"), // Array of interests
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -136,6 +143,10 @@ export const users = pgTable("users", {
   notesCredits: integer("notes_credits").notNull().default(3),
   chatRequestCredits: integer("chat_request_credits").notNull().default(7),
 
+  // Meta
+  isTestUser: boolean("is_test_user").notNull().default(false),
+  isDummyUser: boolean("is_dummy_user").notNull().default(false),
+  
   // Preferences
   preferences: jsonb("preferences")
     .notNull()
@@ -153,6 +164,7 @@ export const products = pgTable("products", {
   currency: varchar("currency", { length: 3 }).notNull(), // USD, EUR, etc.
   credits: integer("credits").notNull().default(0), // How many credits this adds
   metadata: jsonb("metadata").notNull().default("{}"), // Any relevant boosts etc
+  isActive: boolean("is_active").notNull().default(true), // Whether the product is active or not. Can be used to disable a product without deleting it.
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
@@ -207,18 +219,27 @@ export const photos = pgTable("photos", {
 
 // Swipes table to track user swipe actions
 export const swipes = pgTable("swipes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  fromUserId: uuid("from_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  toUserId: uuid("to_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  action: swipeActionEnum("action").notNull(),
-  note: text("note"), // Optional note sent with swipe
-  questionId: uuid("question_id"), // Optional question answered
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
-});
+    id: uuid("id").primaryKey().defaultRandom(),
+    fromUserId: uuid("from_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toUserId: uuid("to_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: swipeActionEnum("action").notNull(),
+    note: text("note"),
+    questionId: uuid("question_id"), // Optional, clarify purpose or add reference
+    status: swipeStatusEnum("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    uniqueSwipe: unique("unique_swipe").on(table.fromUserId, table.toUserId),
+    fromUserIdx: index("swipes_from_user_idx").on(table.fromUserId),
+    toUserIdx: index("swipes_to_user_idx").on(table.toUserId),
+    checkSelfSwipe: check("no_self_swipe", sql`${table.fromUserId} != ${table.toUserId}`)
+  })
+);
 
 // Likes table (subset of swipes where action = 'like' or 'superlike')
 export const likes = pgTable("likes", {

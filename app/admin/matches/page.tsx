@@ -1,6 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,66 +14,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import {
   Search,
-  Filter,
   Eye,
   Heart,
   MessageCircle,
-  MapPin,
   TrendingUp,
   Zap,
   Ban,
-  Download
+  Download,
+  Loader2
 } from "lucide-react";
-
-// Mock matches data
-const mockMatches = [
-  {
-    id: "1",
-    user1: {
-      id: "u1",
-      name: "Sarah Johnson",
-      age: 28,
-      location: "New York, NY",
-      avatar: "sarah"
-    },
-    user2: {
-      id: "u2", 
-      name: "Michael Chen",
-      age: 32,
-      location: "New York, NY",
-      avatar: "michael"
-    },
-    matchedAt: "2024-03-15T10:30:00Z",
-    lastActivity: "2024-03-15T14:22:00Z",
-    messagesCount: 23,
-    status: "active",
-    compatibility: 85,
-    mutualInterests: ["coffee", "hiking", "travel"]
-  },
-  {
-    id: "2",
-    user1: {
-      id: "u3",
-      name: "Emma Wilson", 
-      age: 25,
-      location: "Chicago, IL",
-      avatar: "emma"
-    },
-    user2: {
-      id: "u4",
-      name: "James Rodriguez",
-      age: 29,
-      location: "Chicago, IL", 
-      avatar: "james"
-    },
-    matchedAt: "2024-03-14T16:45:00Z",
-    lastActivity: "2024-03-14T18:30:00Z",
-    messagesCount: 12,
-    status: "active",
-    compatibility: 92,
-    mutualInterests: ["art", "music", "yoga"]
-  }
-];
+import { getMatches } from "@/lib/admin-services";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -86,26 +39,49 @@ const getStatusBadge = (status: string) => {
 };
 
 const formatTimeAgo = (dateString: string) => {
+  if (!dateString) return "Never";
+  
   const date = new Date(dateString);
   const now = new Date();
   const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
   
   if (diffInHours < 1) return "Just now";
   if (diffInHours < 24) return `${diffInHours}h ago`;
-  return `${Math.floor(diffInHours / 24)}d ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 30) return `${diffInDays}d ago`;
+  return date.toLocaleDateString();
 };
 
 export default function MatchesPage() {
-  const [matches] = useState(mockMatches);
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const filteredMatches = matches.filter(match => {
-    const searchMatch = match.user1.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       match.user2.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const statusMatch = statusFilter === "all" || match.status === statusFilter;
-    return searchMatch && statusMatch;
-  });
+  useEffect(() => {
+    fetchMatches();
+  }, [searchTerm, statusFilter, currentPage]);
+
+  const fetchMatches = async () => {
+    try {
+      setLoading(true);
+      const result = await getMatches(currentPage, 50, {
+        search: searchTerm || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+      });
+      
+      setMatches(result.matches);
+      setTotalMatches(result.total);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      setMatches([]);
+      setTotalMatches(0);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -130,7 +106,7 @@ export default function MatchesPage() {
             <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{matches.length.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{totalMatches.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">+15% from last month</p>
           </CardContent>
         </Card>
@@ -168,7 +144,7 @@ export default function MatchesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {Math.round(matches.reduce((acc, m) => acc + m.compatibility, 0) / matches.length)}%
+              {matches.length > 0 ? Math.round(matches.reduce((acc, m) => acc + m.compatibility, 0) / matches.length) : 0}%
             </div>
             <p className="text-xs text-muted-foreground">+3% from last month</p>
           </CardContent>
@@ -203,11 +179,6 @@ export default function MatchesPage() {
                 <SelectItem value="blocked">Blocked</SelectItem>
               </SelectContent>
             </Select>
-            
-            <Button variant="outline">
-              <Filter className="mr-2 h-4 w-4" />
-              More Filters
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -215,102 +186,126 @@ export default function MatchesPage() {
       {/* Matches Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Matches ({filteredMatches.length})</CardTitle>
+          <CardTitle>Matches ({totalMatches.toLocaleString()})</CardTitle>
           <CardDescription>
-            All matches between users on your platform
+            All matches created on your platform
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Users</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Compatibility</TableHead>
-                <TableHead>Messages</TableHead>
-                <TableHead>Matched</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMatches.map((match) => (
-                <TableRow key={match.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex -space-x-2">
-                        <Avatar className="border-2 border-background">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.user1.avatar}`} />
-                          <AvatarFallback>{match.user1.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
-                        </Avatar>
-                        <Avatar className="border-2 border-background">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.user2.avatar}`} />
-                          <AvatarFallback>{match.user2.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
-                        </Avatar>
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">
-                          {match.user1.name} & {match.user2.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Ages {match.user1.age} & {match.user2.age}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="text-sm">
-                      <div className="flex items-center">
-                        <MapPin className="h-3 w-3 mr-1 text-muted-foreground" />
-                        {match.user1.location}
-                      </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    {getStatusBadge(match.status)}
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-12 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-green-500 h-2 rounded-full" 
-                          style={{ width: `${match.compatibility}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">{match.compatibility}%</span>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center space-x-1">
-                      <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{match.messagesCount}</span>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="text-sm">
-                      {formatTimeAgo(match.matchedAt)}
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Ban className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading matches...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Match</TableHead>
+                  <TableHead>Users</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Messages</TableHead>
+                  <TableHead>Compatibility</TableHead>
+                  <TableHead>Matched</TableHead>
+                  <TableHead>Last Activity</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {matches.map((match) => (
+                  <TableRow key={match.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center space-x-2">
+                        <Heart className="h-4 w-4 text-red-500" />
+                        <span className="text-sm font-mono">{match.id.slice(0, 8)}</span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        <div className="flex -space-x-2">
+                          <Avatar className="border-2 border-background">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.user1.avatar}`} />
+                            <AvatarFallback>{match.user1.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                          </Avatar>
+                          <Avatar className="border-2 border-background">
+                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${match.user2.avatar}`} />
+                            <AvatarFallback>{match.user2.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                          </Avatar>
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm">
+                            {match.user1.name} & {match.user2.name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {match.user1.age}, {match.user1.location} • {match.user2.age}, {match.user2.location}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      {getStatusBadge(match.status)}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{match.messagesCount}</span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-full bg-gray-200 rounded-full h-2 max-w-[60px]">
+                          <div 
+                            className="bg-green-600 h-2 rounded-full" 
+                            style={{ width: `${match.compatibility}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium">{match.compatibility}%</span>
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="text-sm">
+                        {formatTimeAgo(match.matchedAt)}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="text-sm text-muted-foreground">
+                        {formatTimeAgo(match.lastActivity)}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <Ban className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          
+          {matches.length === 0 && !loading && (
+            <div className="text-center py-8">
+              <Heart className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-semibold">No matches found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {searchTerm || statusFilter !== "all"
+                  ? "Try adjusting your filters"
+                  : "No matches have been made yet"}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

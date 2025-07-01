@@ -1,0 +1,4 @@
+Code style and rules
+- Always use lib/supabase/schema.ts to generate responses
+- Never use any mock data, always write query to fetch data from database
+- Display real data from database

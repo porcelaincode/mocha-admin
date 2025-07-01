@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import {
   Search,
-  Filter,
   Eye,
   Crown,
   DollarSign,
@@ -23,70 +22,18 @@ import {
   RefreshCw,
   Ban,
   CheckCircle,
-  XCircle
+  Loader2,
+  Trash2,
 } from "lucide-react";
-
-// Mock subscription data
-const mockSubscriptions = [
-  {
-    id: "sub_1",
-    user: {
-      name: "Sarah Johnson",
-      email: "sarah.j@email.com",
-      avatar: "sarah"
-    },
-    plan: "premium",
-    status: "active",
-    price: 19.99,
-    startDate: "2024-01-15T00:00:00Z",
-    renewsAt: "2024-04-15T00:00:00Z",
-    billingCycle: "monthly"
-  },
-  {
-    id: "sub_2",
-    user: {
-      name: "Michael Chen",
-      email: "m.chen@email.com",
-      avatar: "michael"
-    },
-    plan: "platinum",
-    status: "active",
-    price: 39.99,
-    startDate: "2024-02-01T00:00:00Z",
-    renewsAt: "2024-05-01T00:00:00Z",
-    billingCycle: "quarterly"
-  }
-];
-
-const mockProducts = [
-  {
-    id: "prod_1",
-    name: "Premium Plan",
-    description: "Enhanced features for better matches",
-    price: 19.99,
-    currency: "USD",
-    type: "subscription",
-    features: ["Unlimited likes", "See who likes you", "Boost profile", "Advanced filters"]
-  },
-  {
-    id: "prod_2", 
-    name: "Platinum Plan",
-    description: "Premium features plus exclusive benefits",
-    price: 39.99,
-    currency: "USD",
-    type: "subscription",
-    features: ["All Premium features", "Priority support", "Exclusive events", "VIP badge"]
-  },
-  {
-    id: "prod_3",
-    name: "Super Boost",
-    description: "One-time profile boost",
-    price: 4.99,
-    currency: "USD",
-    type: "one_time",
-    features: ["24h profile boost", "10x more visibility"]
-  }
-];
+import { 
+  getSubscriptions, 
+  getProducts, 
+  deleteProduct, 
+  updateProduct,
+  getRevenueAnalytics,
+  getPurchases
+} from "@/lib/admin-services";
+import { CreateProductModal } from "@/components/create-product-modal";
 
 const planColors = {
   basic: "bg-gray-100 text-gray-800",
@@ -97,7 +44,8 @@ const planColors = {
 const statusColors = {
   active: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
-  past_due: "bg-yellow-100 text-yellow-800"
+  past_due: "bg-yellow-100 text-yellow-800",
+  expired: "bg-red-100 text-red-800"
 };
 
 const getStatusBadge = (status: string) => {
@@ -113,10 +61,12 @@ const getPlanBadge = (plan: string) => {
 };
 
 const formatDate = (dateString: string) => {
+  if (!dateString) return "N/A";
   return new Date(dateString).toLocaleDateString();
 };
 
 const getDaysUntilRenewal = (renewsAt: string) => {
+  if (!renewsAt) return 0;
   const now = new Date();
   const renewalDate = new Date(renewsAt);
   const diffTime = renewalDate.getTime() - now.getTime();
@@ -126,26 +76,103 @@ const getDaysUntilRenewal = (renewsAt: string) => {
 
 export default function SubscriptionsPage() {
   const [activeTab, setActiveTab] = useState("subscriptions");
-  const [subscriptions] = useState(mockSubscriptions);
-  const [products] = useState(mockProducts);
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [productStatusFilter, setProductStatusFilter] = useState("all");
+  const [totalSubscriptions, setTotalSubscriptions] = useState(0);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPurchases, setTotalPurchases] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
-  const filteredSubscriptions = subscriptions.filter(sub => {
-    const searchMatch = sub.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       sub.user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const planMatch = planFilter === "all" || sub.plan === planFilter;
-    const statusMatch = statusFilter === "all" || sub.status === statusFilter;
-    
-    return searchMatch && planMatch && statusMatch;
-  });
+  useEffect(() => {
+    fetchData();
+  }, [activeTab, searchTerm, planFilter, statusFilter, productStatusFilter, currentPage]);
 
-  const totalRevenue = subscriptions
-    .filter(sub => sub.status === 'active')
-    .reduce((acc, sub) => acc + sub.price, 0);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      if (activeTab === "subscriptions") {
+        const result = await getSubscriptions(currentPage, 50, {
+          search: searchTerm || undefined,
+          plan: planFilter !== "all" ? planFilter : undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        });
+        setSubscriptions(result.subscriptions);
+        setTotalSubscriptions(result.total);
+      } else if (activeTab === "products") {
+        const result = await getProducts(currentPage, 50, {
+          search: searchTerm || undefined,
+          status: productStatusFilter !== "all" ? productStatusFilter : undefined,
+        });
+        setProducts(result.products);
+        setTotalProducts(result.total);
+      } else if (activeTab === "analytics") {
+        const [revenueResult, purchasesResult] = await Promise.all([
+          getRevenueAnalytics('month'),
+          getPurchases(1, 100)
+        ]);
+        setRevenueData(revenueResult);
+        setPurchases(purchasesResult.purchases);
+        setTotalPurchases(purchasesResult.total);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const SubscriptionDetailDialog = ({ subscription }: { subscription: { user: { name: string; email: string; avatar: string }; plan: string; status: string; price: number; billingCycle: string; renewsAt: string; paymentMethod?: string } }) => (
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm("Are you sure you want to deactivate this product? It will be soft deleted and can be reactivated later.")) {
+      return;
+    }
+
+    setDeleteLoading(productId);
+    try {
+      const result = await deleteProduct(productId, false); // Soft delete
+      if (result.success) {
+        fetchData(); // Refresh the data
+      } else {
+        alert(result.error || "Failed to delete product");
+      }
+    } catch (error) {
+      alert("An error occurred while deleting the product");
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const handleToggleProductStatus = async (productId: string, currentStatus: boolean) => {
+    setDeleteLoading(productId);
+    try {
+      const result = await updateProduct(productId, {
+        isActive: !currentStatus
+      });
+      if (result.success) {
+        fetchData(); // Refresh the data
+      } else {
+        alert("Failed to update product status");
+      }
+    } catch (error) {
+      alert("An error occurred while updating the product");
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  const totalRevenue = revenueData?.current?.totalRevenue || 0;
+  const activeSubscriptionsCount = subscriptions.filter(s => s.status === 'active').length;
+  const churnRate = totalSubscriptions > 0 ? ((subscriptions.filter(s => s.status === 'cancelled' || s.status === 'expired').length / totalSubscriptions) * 100) : 0;
+
+  const SubscriptionDetailDialog = ({ subscription }: { subscription: any }) => (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
@@ -194,20 +221,13 @@ export default function SubscriptionsPage() {
             </div>
           </div>
           
-          <div>
-            <h5 className="font-medium mb-1">Payment Method</h5>
-            <p className="text-sm text-muted-foreground">
-              •••• {subscription.paymentMethod?.split('_')[2] || 'N/A'}
-            </p>
-          </div>
-          
           <div className="flex space-x-2">
-            <Button variant="outline" className="flex-1">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Change Plan
+            <Button variant="outline" size="sm">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Renew
             </Button>
-            <Button variant="destructive" className="flex-1">
-              <Ban className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm">
+              <Ban className="h-4 w-4 mr-2" />
               Cancel
             </Button>
           </div>
@@ -220,19 +240,50 @@ export default function SubscriptionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Subscriptions & Products</h1>
           <p className="text-muted-foreground">
-            Manage user subscriptions and revenue
+            Manage user subscriptions, products, and billing
           </p>
         </div>
-        <Button>
-          <Download className="mr-2 h-4 w-4" />
-          Export Data
-        </Button>
+        <div className="flex gap-2">
+          {activeTab === "products" && (
+            <CreateProductModal onProductCreated={fetchData} />
+          )}
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Data
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Subscriptions</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalSubscriptions.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              {revenueData?.growth?.subscriptionCount > 0 ? '+' : ''}{revenueData?.growth?.subscriptionCount?.toFixed(1) || 0}% from last month
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Subscriptions</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeSubscriptionsCount}</div>
+            <p className="text-xs text-muted-foreground">
+              {((activeSubscriptionsCount / Math.max(totalSubscriptions, 1)) * 100).toFixed(1)}% of total
+            </p>
+          </CardContent>
+        </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
@@ -240,42 +291,20 @@ export default function SubscriptionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">+23% from last month</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Subscriptions</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {subscriptions.filter(s => s.status === 'active').length}
-            </div>
-            <p className="text-xs text-muted-foreground">+15% from last month</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">12.5%</div>
-            <p className="text-xs text-muted-foreground">+2.1% from last month</p>
+            <p className="text-xs text-muted-foreground">
+              {revenueData?.growth?.totalRevenue > 0 ? '+' : ''}{revenueData?.growth?.totalRevenue?.toFixed(1) || 0}% from last month
+            </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Churn Rate</CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3.2%</div>
-            <p className="text-xs text-muted-foreground">-1.5% from last month</p>
+            <div className="text-2xl font-bold">{churnRate.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground">Target: &lt;5%</p>
           </CardContent>
         </Card>
       </div>
@@ -325,14 +354,9 @@ export default function SubscriptionsPage() {
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
-                    <SelectItem value="past_due">Past Due</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                <Button variant="outline">
-                  <Filter className="mr-2 h-4 w-4" />
-                  More Filters
-                </Button>
               </div>
             </CardContent>
           </Card>
@@ -340,133 +364,248 @@ export default function SubscriptionsPage() {
           {/* Subscriptions Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Subscriptions ({filteredSubscriptions.length})</CardTitle>
+              <CardTitle>Subscriptions ({totalSubscriptions.toLocaleString()})</CardTitle>
               <CardDescription>
-                All user subscriptions and their details
+                All user subscriptions and their current status
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Renews</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSubscriptions.map((subscription) => (
-                    <TableRow key={subscription.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-3">
-                          <Avatar>
-                            <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${subscription.user.avatar}`} />
-                            <AvatarFallback>{subscription.user.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="font-medium">{subscription.user.name}</div>
-                            <div className="text-sm text-muted-foreground">{subscription.user.email}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell>
-                        {getPlanBadge(subscription.plan)}
-                      </TableCell>
-                      
-                      <TableCell>
-                        {getStatusBadge(subscription.status)}
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="font-medium">
-                          ${subscription.price}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          /{subscription.billingCycle}
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="text-sm">
-                          {formatDate(subscription.startDate)}
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="text-sm">
-                          {formatDate(subscription.renewsAt)}
-                        </div>
-                        {subscription.status === 'active' && (
-                          <div className="text-xs text-muted-foreground">
-                            {getDaysUntilRenewal(subscription.renewsAt)} days
-                          </div>
-                        )}
-                      </TableCell>
-                      
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <SubscriptionDetailDialog subscription={subscription} />
-                          <Button variant="ghost" size="sm">
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              {loading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading subscriptions...</span>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Next Renewal</TableHead>
+                      <TableHead>Days Left</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {subscriptions.map((subscription) => (
+                      <TableRow key={subscription.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <Avatar>
+                              <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${subscription.user.avatar}`} />
+                              <AvatarFallback>{subscription.user.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">{subscription.user.name}</div>
+                              <div className="text-sm text-muted-foreground">{subscription.user.email}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        
+                        <TableCell>
+                          {getPlanBadge(subscription.plan)}
+                        </TableCell>
+                        
+                        <TableCell>
+                          {getStatusBadge(subscription.status)}
+                        </TableCell>
+                        
+                        <TableCell>
+                          <div className="font-medium">${subscription.price}</div>
+                          <div className="text-sm text-muted-foreground">per {subscription.billingCycle}</div>
+                        </TableCell>
+                        
+                        <TableCell>
+                          <div className="text-sm">
+                            {formatDate(subscription.renewsAt)}
+                          </div>
+                        </TableCell>
+                        
+                        <TableCell>
+                          <div className="text-sm">
+                            {subscription.status === 'active' ? (
+                              subscription.daysUntilRenewal > 0 ? (
+                                <span className="text-green-600">
+                                  {subscription.daysUntilRenewal} days
+                                </span>
+                              ) : (
+                                <span className="text-red-600">Overdue</span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <SubscriptionDetailDialog subscription={subscription} />
+                            <Button variant="ghost" size="sm">
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+              
+              {subscriptions.length === 0 && !loading && (
+                <div className="text-center py-8">
+                  <Crown className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <h3 className="mt-2 text-sm font-semibold">No subscriptions found</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {searchTerm || planFilter !== "all" || statusFilter !== "all"
+                      ? "Try adjusting your filters"
+                      : "No subscriptions have been created yet"}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="products" className="space-y-4">
+          {/* Product Filters */}
           <Card>
             <CardHeader>
-              <CardTitle>Products & Plans</CardTitle>
-              <CardDescription>
-                Manage subscription plans and one-time products
-              </CardDescription>
+              <CardTitle>Filters</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {products.map((product) => (
-                  <Card key={product.id}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">{product.name}</CardTitle>
-                        <Crown className="h-5 w-5 text-yellow-500" />
-                      </div>
-                      <CardDescription>{product.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="text-2xl font-bold">
-                          ${product.price}
-                          {product.type === 'subscription' && <span className="text-sm font-normal">/month</span>}
-                        </div>
-                        
-                        <div className="space-y-2">
-                          {product.features.map((feature, index) => (
-                            <div key={index} className="flex items-center space-x-2 text-sm">
-                              <CheckCircle className="h-4 w-4 text-green-500" />
-                              <span>{feature}</span>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        <Button variant="outline" className="w-full">
-                          Edit Product
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search products..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                
+                <Select value={productStatusFilter} onValueChange={setProductStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Products Grid */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Products ({totalProducts.toLocaleString()})</CardTitle>
+              <CardDescription>Manage subscription plans and one-time purchases</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading products...</span>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {products.map((product) => (
+                    <Card key={product.id} className={!product.isActive ? "opacity-60" : ""}>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">{product.name}</CardTitle>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={product.type === 'subscription' ? 'default' : 'secondary'}>
+                              {product.type}
+                            </Badge>
+                            <Badge variant={product.isActive ? 'default' : 'destructive'}>
+                              {product.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <CardDescription>{product.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold mb-4">
+                          ${product.price}
+                          {product.type === 'subscription' && <span className="text-sm font-normal text-muted-foreground">/month</span>}
+                        </div>
+                        
+                        {product.credits > 0 && (
+                          <div className="mb-4">
+                            <Badge variant="outline">{product.credits} credits</Badge>
+                          </div>
+                        )}
+                        
+                        {product.features && product.features.length > 0 && (
+                          <ul className="space-y-2 mb-4">
+                            {product.features.slice(0, 3).map((feature: string, index: number) => (
+                              <li key={index} className="flex items-center text-sm">
+                                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                                {feature}
+                              </li>
+                            ))}
+                            {product.features.length > 3 && (
+                              <li className="text-sm text-muted-foreground">
+                                +{product.features.length - 3} more features
+                              </li>
+                            )}
+                          </ul>
+                        )}
+                        
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1"
+                            onClick={() => handleToggleProductStatus(product.id, product.isActive)}
+                            disabled={deleteLoading === product.id}
+                          >
+                            {deleteLoading === product.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : product.isActive ? (
+                              <>
+                                <Ban className="h-4 w-4 mr-1" />
+                                Deactivate
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Activate
+                              </>
+                            )}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDeleteProduct(product.id)}
+                            disabled={deleteLoading === product.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+              
+              {products.length === 0 && !loading && (
+                <div className="text-center py-8">
+                  <Crown className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <h3 className="mt-2 text-sm font-semibold">No products found</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {searchTerm || productStatusFilter !== "all"
+                      ? "Try adjusting your filters"
+                      : "No products have been created yet"}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -476,63 +615,115 @@ export default function SubscriptionsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Plan Distribution</CardTitle>
-                <CardDescription>Current subscription breakdown</CardDescription>
+                <CardDescription>Current subscription plan breakdown</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Basic Plan</span>
-                    <span>33%</span>
-                  </div>
-                  <Progress value={33} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Premium Plan</span>
-                    <span>50%</span>
-                  </div>
-                  <Progress value={50} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Platinum Plan</span>
-                    <span>17%</span>
-                  </div>
-                  <Progress value={17} className="h-2" />
-                </div>
+                {['basic', 'premium', 'platinum'].map((plan) => {
+                  const count = subscriptions.filter(s => s.plan === plan && s.status === 'active').length;
+                  const percentage = totalSubscriptions > 0 ? (count / totalSubscriptions) * 100 : 0;
+                  
+                  return (
+                    <div key={plan} className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          {getPlanBadge(plan)}
+                          {plan.charAt(0).toUpperCase() + plan.slice(1)}
+                        </span>
+                        <span>{count} ({percentage.toFixed(1)}%)</span>
+                      </div>
+                      <Progress value={percentage} className="h-2" />
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader>
-                <CardTitle>Revenue Trends</CardTitle>
-                <CardDescription>Monthly revenue growth</CardDescription>
+                <CardTitle>Revenue Breakdown</CardTitle>
+                <CardDescription>Monthly revenue by type</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span>January</span>
-                    <span>$2,340</span>
+                    <span>Subscription Revenue</span>
+                    <span>${revenueData?.current?.subscriptionRevenue?.toFixed(2) || '0.00'}</span>
                   </div>
-                  <Progress value={70} className="h-2" />
+                  <Progress 
+                    value={totalRevenue > 0 ? (revenueData?.current?.subscriptionRevenue / totalRevenue) * 100 : 0} 
+                    className="h-2" 
+                  />
                 </div>
+                
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span>February</span>
-                    <span>$2,890</span>
+                    <span>One-time Purchases</span>
+                    <span>${revenueData?.current?.purchaseRevenue?.toFixed(2) || '0.00'}</span>
                   </div>
-                  <Progress value={85} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>March</span>
-                    <span>$3,120</span>
-                  </div>
-                  <Progress value={95} className="h-2" />
+                  <Progress 
+                    value={totalRevenue > 0 ? (revenueData?.current?.purchaseRevenue / totalRevenue) * 100 : 0} 
+                    className="h-2" 
+                  />
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Recent Purchases */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Purchases ({totalPurchases})</CardTitle>
+              <CardDescription>Latest one-time purchases and boosts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {purchases.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {purchases.slice(0, 10).map((purchase) => (
+                      <TableRow key={purchase.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{purchase.user.name}</div>
+                            <div className="text-sm text-muted-foreground">{purchase.user.email}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{purchase.product.name}</div>
+                            <Badge variant="secondary" className="text-xs">
+                              {purchase.product.type}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">${purchase.amount}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{formatDate(purchase.createdAt)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-8">
+                  <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <h3 className="mt-2 text-sm font-semibold">No purchases found</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    No one-time purchases have been made yet
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

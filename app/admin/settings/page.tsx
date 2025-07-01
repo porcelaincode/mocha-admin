@@ -4,99 +4,178 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { 
-  Shield, 
-  Database,
+  Shield,
   Globe,
   Users,
-  Save
+  Save,
+  Bell,
+  CreditCard
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [appName, setAppName] = useState("Mocha Dating App");
-  const [supportEmail, setSupportEmail] = useState("support@mocha.app");
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [settings, setSettings] = useState({
+    // General Settings
+    siteName: 'Dating App',
+    siteDescription: 'Find your perfect match',
+    maintenanceMode: false,
+    registrationEnabled: true,
+    emailVerificationRequired: true,
+    
+    // Security Settings
+    passwordMinLength: 8,
+    twoFactorEnabled: false,
+    sessionTimeout: 24,
+    maxLoginAttempts: 5,
+    
+    // Matching Settings
+    maxDistance: 100,
+    ageRangeMin: 18,
+    ageRangeMax: 80,
+    autoMatchEnabled: true,
+    
+    // Notification Settings
+    emailNotifications: true,
+    pushNotifications: true,
+    marketingEmails: false,
+    
+    // Payment Settings
+    stripePublicKey: '',
+    stripeSecretKey: '',
+    subscriptionPrices: {
+      basic: 9.99,
+      premium: 19.99,
+      platinum: 29.99
+    },
+    
+    // Content Moderation
+    autoModerationEnabled: true,
+    profanityFilterEnabled: true,
+    imageAnalysisEnabled: true,
+    manualApprovalRequired: false
+  });
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const handleSettingChange = (key: string, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const handleNestedSettingChange = (parent: string, key: string, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      [parent]: {
+        ...prev[parent as keyof typeof prev] as object,
+        [key]: value
+      }
+    }));
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      // In a real implementation, you would call an API to save settings
+      console.log('Saving settings:', settings);
+      // Show success message
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      // Show error message
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Configure application settings and preferences
+          Configure platform settings and preferences
         </p>
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="matching">Matching</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="system">System</TabsTrigger>
+          <TabsTrigger value="moderation">Moderation</TabsTrigger>
         </TabsList>
         
         <TabsContent value="general" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Application Settings</CardTitle>
-              <CardDescription>Basic app configuration and branding</CardDescription>
+              <CardTitle className="flex items-center">
+                <Globe className="mr-2 h-5 w-5" />
+                Site Configuration
+              </CardTitle>
+              <CardDescription>
+                Basic site settings and configuration
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">App Name</label>
-                <Input
-                  value={appName}
-                  onChange={(e) => setAppName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Support Email</label>
-                <Input
-                  type="email"
-                  value={supportEmail}
-                  onChange={(e) => setSupportEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">App Description</label>
-                <Textarea
-                  placeholder="Enter app description..."
-                  rows={3}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">Maintenance Mode</label>
-                  <p className="text-sm text-muted-foreground">
-                    Temporarily disable app access for maintenance
-                  </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Site Name</label>
+                  <Input
+                    value={settings.siteName}
+                    onChange={(e) => handleSettingChange('siteName', e.target.value)}
+                  />
                 </div>
-                <Switch 
-                  checked={maintenanceMode} 
-                  onCheckedChange={setMaintenanceMode}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">User Registration</label>
-                  <p className="text-sm text-muted-foreground">
-                    Allow new users to register
-                  </p>
+                <div>
+                  <label className="text-sm font-medium">Site Description</label>
+                  <Input
+                    value={settings.siteDescription}
+                    onChange={(e) => handleSettingChange('siteDescription', e.target.value)}
+                  />
                 </div>
-                <Switch 
-                  checked={registrationEnabled} 
-                  onCheckedChange={setRegistrationEnabled}
-                />
               </div>
-              <Button>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </Button>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Maintenance Mode</label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable maintenance mode to prevent user access
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={settings.maintenanceMode} 
+                    onCheckedChange={(checked) => handleSettingChange('maintenanceMode', checked)}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Registration Enabled</label>
+                    <p className="text-sm text-muted-foreground">
+                      Allow new users to register
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={settings.registrationEnabled} 
+                    onCheckedChange={(checked) => handleSettingChange('registrationEnabled', checked)}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Email Verification Required</label>
+                    <p className="text-sm text-muted-foreground">
+                      Require email verification for new accounts
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={settings.emailVerificationRequired} 
+                    onCheckedChange={(checked) => handleSettingChange('emailVerificationRequired', checked)}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -104,59 +183,110 @@ export default function SettingsPage() {
         <TabsContent value="security" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Security Settings</CardTitle>
-              <CardDescription>Configure security and authentication options</CardDescription>
+              <CardTitle className="flex items-center">
+                <Shield className="mr-2 h-5 w-5" />
+                Security Configuration
+              </CardTitle>
+              <CardDescription>
+                Security and authentication settings
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Minimum Password Length</label>
+                  <Input
+                    type="number"
+                    value={settings.passwordMinLength}
+                    onChange={(e) => handleSettingChange('passwordMinLength', parseInt(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Session Timeout (hours)</label>
+                  <Input
+                    type="number"
+                    value={settings.sessionTimeout}
+                    onChange={(e) => handleSettingChange('sessionTimeout', parseInt(e.target.value))}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Max Login Attempts</label>
+                <Input
+                  type="number"
+                  value={settings.maxLoginAttempts}
+                  onChange={(e) => handleSettingChange('maxLoginAttempts', parseInt(e.target.value))}
+                />
+              </div>
+              
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <label className="text-sm font-medium">Two-Factor Authentication</label>
                   <p className="text-sm text-muted-foreground">
-                    Require 2FA for admin accounts
+                    Enable two-factor authentication for admin accounts
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={settings.twoFactorEnabled}
+                  onCheckedChange={(checked) => handleSettingChange('twoFactorEnabled', checked)}
+                />
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="matching" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Users className="mr-2 h-5 w-5" />
+                Matching Algorithm
+              </CardTitle>
+              <CardDescription>
+                Configure matching preferences and algorithms
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Max Distance (km)</label>
+                  <Input
+                    type="number"
+                    value={settings.maxDistance}
+                    onChange={(e) => handleSettingChange('maxDistance', parseInt(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Min Age</label>
+                  <Input
+                    type="number"
+                    value={settings.ageRangeMin}
+                    onChange={(e) => handleSettingChange('ageRangeMin', parseInt(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Max Age</label>
+                  <Input
+                    type="number"
+                    value={settings.ageRangeMax}
+                    onChange={(e) => handleSettingChange('ageRangeMax', parseInt(e.target.value))}
+                  />
+                </div>
+              </div>
+              
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <label className="text-sm font-medium">Phone Verification</label>
+                  <label className="text-sm font-medium">Auto-Match Enabled</label>
                   <p className="text-sm text-muted-foreground">
-                    Require phone verification for new users
+                    Automatically create matches based on preferences
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch
+                  checked={settings.autoMatchEnabled}
+                  onCheckedChange={(checked) => handleSettingChange('autoMatchEnabled', checked)}
+                />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Session Timeout (minutes)</label>
-                <Select defaultValue="60">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                    <SelectItem value="120">2 hours</SelectItem>
-                    <SelectItem value="480">8 hours</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Password Policy</label>
-                <Select defaultValue="medium">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low (8+ characters)</SelectItem>
-                    <SelectItem value="medium">Medium (8+ chars, mixed case)</SelectItem>
-                    <SelectItem value="high">High (12+ chars, symbols)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button>
-                <Save className="h-4 w-4 mr-2" />
-                Save Security Settings
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -164,52 +294,55 @@ export default function SettingsPage() {
         <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>Configure system notifications and alerts</CardDescription>
+              <CardTitle className="flex items-center">
+                <Bell className="mr-2 h-5 w-5" />
+                Notification Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure notification settings and preferences
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">Email Notifications</label>
-                  <p className="text-sm text-muted-foreground">
-                    Send email notifications for important events
-                  </p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Email Notifications</label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable email notifications for users
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.emailNotifications}
+                    onCheckedChange={(checked) => handleSettingChange('emailNotifications', checked)}
+                  />
                 </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">SMS Alerts</label>
-                  <p className="text-sm text-muted-foreground">
-                    Send SMS alerts for critical issues
-                  </p>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Push Notifications</label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable push notifications for mobile apps
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.pushNotifications}
+                    onCheckedChange={(checked) => handleSettingChange('pushNotifications', checked)}
+                  />
                 </div>
-                <Switch />
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Marketing Emails</label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable marketing and promotional emails
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.marketingEmails}
+                    onCheckedChange={(checked) => handleSettingChange('marketingEmails', checked)}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Admin Alert Email</label>
-                <Input
-                  type="email"
-                  placeholder="admin@mocha.app"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Alert Threshold</label>
-                <Select defaultValue="high">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">All Events</SelectItem>
-                    <SelectItem value="medium">Important Events</SelectItem>
-                    <SelectItem value="high">Critical Events Only</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button>
-                <Save className="h-4 w-4 mr-2" />
-                Save Notification Settings
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -217,119 +350,149 @@ export default function SettingsPage() {
         <TabsContent value="payments" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Settings</CardTitle>
-              <CardDescription>Configure payment processing and billing</CardDescription>
+              <CardTitle className="flex items-center">
+                <CreditCard className="mr-2 h-5 w-5" />
+                Payment Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure payment processing and subscription pricing
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Payment Provider</label>
-                <Select defaultValue="stripe">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stripe">Stripe</SelectItem>
-                    <SelectItem value="paypal">PayPal</SelectItem>
-                    <SelectItem value="square">Square</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Currency</label>
-                <Select defaultValue="usd">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="usd">USD ($)</SelectItem>
-                    <SelectItem value="eur">EUR (€)</SelectItem>
-                    <SelectItem value="gbp">GBP (£)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <label className="text-sm font-medium">Auto-Refunds</label>
-                  <p className="text-sm text-muted-foreground">
-                    Automatically process eligible refunds
-                  </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Stripe Public Key</label>
+                  <Input
+                    type="password"
+                    value={settings.stripePublicKey}
+                    onChange={(e) => handleSettingChange('stripePublicKey', e.target.value)}
+                    placeholder="pk_test_..."
+                  />
                 </div>
-                <Switch />
+                <div>
+                  <label className="text-sm font-medium">Stripe Secret Key</label>
+                  <Input
+                    type="password"
+                    value={settings.stripeSecretKey}
+                    onChange={(e) => handleSettingChange('stripeSecretKey', e.target.value)}
+                    placeholder="sk_test_..."
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Tax Rate (%)</label>
-                <Input
-                  type="number"
-                  placeholder="8.25"
-                  step="0.01"
-                />
+              
+              <div>
+                <label className="text-base font-medium">Subscription Pricing</label>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Configure monthly subscription prices for each plan
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Basic Plan ($)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={settings.subscriptionPrices.basic}
+                      onChange={(e) => handleNestedSettingChange('subscriptionPrices', 'basic', parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Premium Plan ($)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={settings.subscriptionPrices.premium}
+                      onChange={(e) => handleNestedSettingChange('subscriptionPrices', 'premium', parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Platinum Plan ($)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={settings.subscriptionPrices.platinum}
+                      onChange={(e) => handleNestedSettingChange('subscriptionPrices', 'platinum', parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
               </div>
-              <Button>
-                <Save className="h-4 w-4 mr-2" />
-                Save Payment Settings
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
         
-        <TabsContent value="system" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>System Information</CardTitle>
-                <CardDescription>Current system status and information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-sm">App Version</span>
-                  <span className="text-sm font-medium">v2.1.0</span>
+        <TabsContent value="moderation" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Shield className="mr-2 h-5 w-5" />
+                Content Moderation
+              </CardTitle>
+              <CardDescription>
+                Configure content moderation and safety features
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Auto Moderation</label>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically moderate content using AI
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.autoModerationEnabled}
+                    onCheckedChange={(checked) => handleSettingChange('autoModerationEnabled', checked)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Database Status</span>
-                  <span className="text-sm font-medium text-green-600">Connected</span>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Profanity Filter</label>
+                    <p className="text-sm text-muted-foreground">
+                      Filter out inappropriate language in messages
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.profanityFilterEnabled}
+                    onCheckedChange={(checked) => handleSettingChange('profanityFilterEnabled', checked)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Storage Used</span>
-                  <span className="text-sm font-medium">45.2 GB</span>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Image Analysis</label>
+                    <p className="text-sm text-muted-foreground">
+                      Analyze uploaded images for inappropriate content
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.imageAnalysisEnabled}
+                    onCheckedChange={(checked) => handleSettingChange('imageAnalysisEnabled', checked)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Active Users</span>
-                  <span className="text-sm font-medium">8,921</span>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-medium">Manual Approval Required</label>
+                    <p className="text-sm text-muted-foreground">
+                      Require manual approval for all uploaded content
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.manualApprovalRequired}
+                    onCheckedChange={(checked) => handleSettingChange('manualApprovalRequired', checked)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Server Uptime</span>
-                  <span className="text-sm font-medium">15 days, 4 hours</span>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>System Actions</CardTitle>
-                <CardDescription>System maintenance and backup options</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full">
-                  <Database className="h-4 w-4 mr-2" />
-                  Backup Database
-                </Button>
-                <Button variant="outline" className="w-full">
-                  <Globe className="h-4 w-4 mr-2" />
-                  Clear Cache
-                </Button>
-                <Button variant="outline" className="w-full">
-                  <Users className="h-4 w-4 mr-2" />
-                  Export User Data
-                </Button>
-                <Button variant="destructive" className="w-full">
-                  <Shield className="h-4 w-4 mr-2" />
-                  System Restart
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
+
+      <Button onClick={handleSaveSettings}>
+        <Save className="mr-2 h-4 w-4" />
+        Save All Changes
+      </Button>
     </div>
   );
 } 

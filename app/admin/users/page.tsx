@@ -2,7 +2,8 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,73 +30,15 @@ import {
   Crown,
   Users,
   UserX,
-  Download
+  Download,
+  Loader2,
+  Edit,
+  AlertCircle
 } from "lucide-react";
-
-// Mock user data - replace with real data from your database
-const mockUsers = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    email: "sarah.j@email.com",
-    phoneNumber: "+1234567890",
-    age: 28,
-    location: "New York, NY",
-    verified: true,
-    isOnline: true,
-    lastSeen: "2 min ago",
-    createdAt: "2024-01-15",
-    subscription: "premium",
-    matches: 45,
-    messages: 234,
-    profileViews: 1200,
-    photos: 6,
-    bio: "Love hiking and coffee ☕",
-    interests: ["hiking", "coffee", "travel"],
-    status: "active"
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    email: "m.chen@email.com",
-    phoneNumber: "+1234567891",
-    age: 32,
-    location: "Los Angeles, CA",
-    verified: false,
-    isOnline: false,
-    lastSeen: "1 hour ago",
-    createdAt: "2024-01-10",
-    subscription: "basic",
-    matches: 12,
-    messages: 89,
-    profileViews: 456,
-    photos: 4,
-    bio: "Tech enthusiast and foodie",
-    interests: ["tech", "food", "gaming"],
-    status: "active"
-  },
-  {
-    id: "3",
-    name: "Emma Wilson",
-    email: "emma.w@email.com",
-    phoneNumber: "+1234567892",
-    age: 25,
-    location: "Chicago, IL",
-    verified: true,
-    isOnline: true,
-    lastSeen: "just now",
-    createdAt: "2024-02-01",
-    subscription: "platinum",
-    matches: 78,
-    messages: 456,
-    profileViews: 2100,
-    photos: 8,
-    bio: "Artist and yoga instructor 🧘‍♀️",
-    interests: ["art", "yoga", "music"],
-    status: "suspended"
-  },
-  // Add more mock users as needed
-];
+import { getUsers, deleteUser } from "@/lib/admin-services";
+import BulkUploadModal from "@/components/bulk-upload-modal";
+import AddUserModal from "@/components/add-user-modal";
+import EditUserModal from "@/components/edit-user-modal";
 
 const subscriptionColors = {
   basic: "bg-gray-100 text-gray-800",
@@ -104,23 +47,45 @@ const subscriptionColors = {
 };
 
 export default function UsersPage() {
-  const [users] = useState(mockUsers);
+  const router = useRouter();
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [subscriptionFilter, setSubscriptionFilter] = useState("all");
   const [verificationFilter, setVerificationFilter] = useState("all");
+  const [userTypeFilter, setUserTypeFilter] = useState("all");
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<any>(null);
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter;
-    const matchesSubscription = subscriptionFilter === "all" || user.subscription === subscriptionFilter;
-    const matchesVerification = verificationFilter === "all" || 
-                               (verificationFilter === "verified" && user.verified) ||
-                               (verificationFilter === "unverified" && !user.verified);
-    
-    return matchesSearch && matchesStatus && matchesSubscription && matchesVerification;
-  });
+  useEffect(() => {
+    fetchUsers();
+  }, [searchTerm, statusFilter, subscriptionFilter, verificationFilter, userTypeFilter, currentPage]);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const result = await getUsers(currentPage, 50, {
+        search: searchTerm || undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        subscription: subscriptionFilter !== "all" ? subscriptionFilter : undefined,
+        verified: verificationFilter !== "all" ? verificationFilter : undefined,
+        userType: userTypeFilter !== "all" ? userTypeFilter : undefined,
+      });
+      
+      setUsers(result.users);
+      setTotalUsers(result.total);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setUsers([]);
+      setTotalUsers(0);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -133,6 +98,30 @@ export default function UsersPage() {
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const navigateToUserProfile = (userId: string) => {
+    router.push(`/admin/users/${userId}`);
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    setDeletingUserId(userId);
+    try {
+      await deleteUser(userId);
+      await fetchUsers(); // Refresh the list
+      setShowDeleteDialog(false);
+      setUserToDelete(null);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      // You could add a toast notification here
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  const confirmDeleteUser = (user: any) => {
+    setUserToDelete(user);
+    setShowDeleteDialog(true);
   };
 
   const UserDetailDialog = ({ user }: { user: any }) => (
@@ -188,6 +177,16 @@ export default function UsersPage() {
                   <MapPin className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">{user.location}</span>
                 </div>
+                {(user.latitude || user.longitude) && (
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      {user.latitude && user.longitude 
+                        ? `${user.latitude}, ${user.longitude}` 
+                        : `Lat: ${user.latitude || 'N/A'}, Lng: ${user.longitude || 'N/A'}`}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center space-x-2">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Age {user.age}</span>
@@ -212,17 +211,21 @@ export default function UsersPage() {
             
             <div>
               <h4 className="font-medium mb-2">Bio</h4>
-              <p className="text-sm text-muted-foreground">{user.bio}</p>
+              <p className="text-sm text-muted-foreground">{user.bio || 'No bio provided'}</p>
             </div>
             
             <div>
               <h4 className="font-medium mb-2">Interests</h4>
               <div className="flex flex-wrap gap-1">
-                {user.interests.map((interest: string) => (
-                  <Badge key={interest} variant="outline" className="text-xs">
-                    {interest}
-                  </Badge>
-                ))}
+                {user.interests && user.interests.length > 0 ? (
+                  user.interests.map((interest: string, index: number) => (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {interest}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">No interests added</span>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -245,17 +248,19 @@ export default function UsersPage() {
               </div>
               
               <div>
-                <h4 className="font-medium mb-2">Profile Completion</h4>
+                <h4 className="font-medium mb-2">Profile Stats</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span>Photos ({user.photos}/10)</span>
-                    <span>{(user.photos / 10 * 100).toFixed(0)}%</span>
+                    <span>Photos uploaded</span>
+                    <span>{user.photos}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full" 
-                      style={{ width: `${user.photos / 10 * 100}%` }}
-                    ></div>
+                  <div className="flex justify-between text-sm">
+                    <span>Profile views</span>
+                    <span>{user.profileViews}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Matches</span>
+                    <span>{user.matches}</span>
                   </div>
                 </div>
               </div>
@@ -267,48 +272,78 @@ export default function UsersPage() {
               <div>
                 <h4 className="font-medium mb-2">Current Plan</h4>
                 <Badge className={subscriptionColors[user.subscription as keyof typeof subscriptionColors]}>
-                  {user.subscription.charAt(0).toUpperCase() + user.subscription.slice(1)}
+                  {user.subscription}
                 </Badge>
               </div>
               
               <div>
-                <h4 className="font-medium mb-2">Usage Stats</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <Card>
-                    <CardContent className="p-3">
-                      <div className="text-2xl font-bold">{user.matches}</div>
-                      <p className="text-xs text-muted-foreground">Total Matches</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-3">
-                      <div className="text-2xl font-bold">{user.messages}</div>
-                      <p className="text-xs text-muted-foreground">Messages Sent</p>
-                    </CardContent>
-                  </Card>
+                <h4 className="font-medium mb-2">Account Status</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    {user.verified ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <span className="text-sm text-green-600">Verified Account</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserX className="h-4 w-4 text-yellow-500" />
+                        <span className="text-sm text-yellow-600">Unverified Account</span>
+                      </>
+                    )}
+                  </div>
+                  {user.isTestUser && (
+                    <div className="flex items-center space-x-2">
+                      <Shield className="h-4 w-4 text-orange-500" />
+                      <span className="text-sm text-orange-600">Test User</span>
+                    </div>
+                  )}
+                  {user.isDummyUser && (
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-purple-500" />
+                      <span className="text-sm text-purple-600">Dummy User</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </TabsContent>
           
           <TabsContent value="actions" className="space-y-4">
-            <div className="space-y-2">
-              <Button variant="outline" className="w-full justify-start">
-                <Mail className="mr-2 h-4 w-4" />
-                Send Message
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Verify User
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <Crown className="mr-2 h-4 w-4" />
-                Upgrade Subscription
-              </Button>
-              <Button variant="destructive" className="w-full justify-start">
-                <Ban className="mr-2 h-4 w-4" />
-                Suspend User
-              </Button>
+            <div className="space-y-4">
+              <div className="flex space-x-2">
+                <Button variant="outline" size="sm">
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Message
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Ban className="h-4 w-4 mr-2" />
+                  Suspend User
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="font-medium">Admin Actions</h4>
+                <div className="flex flex-col space-y-2">
+                  <Button variant="ghost" size="sm" className="justify-start">
+                    <Shield className="h-4 w-4 mr-2" />
+                    {user.verified ? 'Remove Verification' : 'Verify User'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start">
+                    <Crown className="h-4 w-4 mr-2" />
+                    Change Subscription
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="justify-start text-red-600"
+                    onClick={() => confirmDeleteUser(user)}
+                  >
+                    <UserX className="h-4 w-4 mr-2" />
+                    Delete Account
+                  </Button>
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
@@ -325,21 +360,25 @@ export default function UsersPage() {
             Manage and monitor all users on your platform
           </p>
         </div>
-        <Button>
-          <Download className="mr-2 h-4 w-4" />
-          Export Users
-        </Button>
+        <div className="flex gap-2">
+          <AddUserModal onUserAdded={() => fetchUsers()} />
+          <BulkUploadModal onUploadComplete={() => fetchUsers()} />
+          <Button>
+            <Download className="mr-2 h-4 w-4" />
+            Export Users
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{users.length.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{totalUsers.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">+12% from last month</p>
           </CardContent>
         </Card>
@@ -351,9 +390,9 @@ export default function UsersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter(u => u.status === 'active').length}
+              {users.filter(u => u.isOnline).length}
             </div>
-            <p className="text-xs text-muted-foreground">+8% from last month</p>
+            <p className="text-xs text-muted-foreground">Currently online</p>
           </CardContent>
         </Card>
         
@@ -366,20 +405,54 @@ export default function UsersPage() {
             <div className="text-2xl font-bold">
               {users.filter(u => u.verified).length}
             </div>
-            <p className="text-xs text-muted-foreground">+15% from last month</p>
+            <p className="text-xs text-muted-foreground">
+              {totalUsers > 0 ? Math.round((users.filter(u => u.verified).length / totalUsers) * 100) : 0}% verified
+            </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Suspended</CardTitle>
-            <UserX className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Premium Users</CardTitle>
+            <Crown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter(u => u.status === 'suspended').length}
+              {users.filter(u => u.subscription !== 'basic').length}
             </div>
-            <p className="text-xs text-muted-foreground">-5% from last month</p>
+            <p className="text-xs text-muted-foreground">
+              {totalUsers > 0 ? Math.round((users.filter(u => u.subscription !== 'basic').length / totalUsers) * 100) : 0}% premium
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Test Users</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {users.filter(u => u.isTestUser).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalUsers > 0 ? Math.round((users.filter(u => u.isTestUser).length / totalUsers) * 100) : 0}% test users
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Dummy Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {users.filter(u => u.isDummyUser).length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {totalUsers > 0 ? Math.round((users.filter(u => u.isDummyUser).length / totalUsers) * 100) : 0}% dummy users
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -436,10 +509,17 @@ export default function UsersPage() {
               </SelectContent>
             </Select>
             
-            <Button variant="outline">
-              <Filter className="mr-2 h-4 w-4" />
-              More Filters
-            </Button>
+            <Select value={userTypeFilter} onValueChange={setUserTypeFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="User Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="regular">Regular Users</SelectItem>
+                <SelectItem value="test">Test Users</SelectItem>
+                <SelectItem value="dummy">Dummy Users</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -447,96 +527,209 @@ export default function UsersPage() {
       {/* Users Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Users ({filteredUsers.length})</CardTitle>
+          <CardTitle>Users ({totalUsers.toLocaleString()})</CardTitle>
           <CardDescription>
-            A list of all users in your system with their details and status.
+            A list of all users in your dating app
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Subscription</TableHead>
-                <TableHead>Activity</TableHead>
-                <TableHead>Stats</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <Avatar>
-                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} />
-                        <AvatarFallback>{user.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium flex items-center gap-2">
-                          {user.name}
-                          {user.verified && <Shield className="h-3 w-3 text-blue-500" />}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Age {user.age} • {user.location}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="text-sm">
-                      <div>{user.email}</div>
-                      <div className="text-muted-foreground">{user.phoneNumber}</div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="space-y-1">
-                      {getStatusBadge(user.status)}
-                      <div className="flex items-center space-x-1 text-xs text-muted-foreground">
-                        <div className={`w-2 h-2 rounded-full ${user.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                        <span>{user.isOnline ? 'Online' : user.lastSeen}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <Badge className={subscriptionColors[user.subscription as keyof typeof subscriptionColors]}>
-                      {user.subscription}
-                    </Badge>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="text-sm">
-                      <div>Joined {user.createdAt}</div>
-                      <div className="text-muted-foreground">{user.photos} photos</div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="text-sm">
-                      <div>{user.matches} matches</div>
-                      <div className="text-muted-foreground">{user.messages} messages</div>
-                    </div>
-                  </TableCell>
-                  
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <UserDetailDialog user={user} />
-                      <Button variant="ghost" size="sm">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading users...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Subscription</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead>Activity</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`} />
+                          <AvatarFallback>{user.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            <button 
+                              onClick={() => navigateToUserProfile(user.id)}
+                              className="text-left hover:text-blue-600 transition-colors"
+                            >
+                              {user.name}
+                            </button>
+                            {user.verified && <Shield className="h-3 w-3 text-blue-500" />}
+                            {user.isTestUser && <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600">Test</Badge>}
+                            {user.isDummyUser && <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600">Dummy</Badge>}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {user.age} years • {user.location}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="text-sm">{user.email}</div>
+                        <div className="text-sm text-muted-foreground">{user.phoneNumber}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${user.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        {getStatusBadge(user.status)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={subscriptionColors[user.subscription as keyof typeof subscriptionColors]}>
+                        {user.subscription}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{user.createdAt}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {user.isOnline ? 'Online' : user.lastSeen}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => navigateToUserProfile(user.id)}
+                          title="View Full Profile"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <UserDetailDialog user={user} />
+                        <EditUserModal 
+                          userId={user.id} 
+                          onUserUpdated={() => fetchUsers()}
+                        >
+                          <Button variant="ghost" size="sm" title="Edit User">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </EditUserModal>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          title="Delete User"
+                          onClick={() => confirmDeleteUser(user)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <UserX className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          
+          {users.length === 0 && !loading && (
+            <div className="text-center py-8">
+              <Users className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-semibold">No users found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {searchTerm || statusFilter !== "all" || subscriptionFilter !== "all" || verificationFilter !== "all" || userTypeFilter !== "all"
+                  ? "Try adjusting your filters"
+                  : "No users have signed up yet"}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this user account? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {userToDelete && (
+            <div className="py-4">
+              <div className="flex items-center space-x-4 p-4 border rounded-lg bg-muted/50">
+                <Avatar>
+                  <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userToDelete.name}`} />
+                  <AvatarFallback>{userToDelete.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="font-medium flex items-center gap-2">
+                    {userToDelete.name}
+                    {userToDelete.verified && <Shield className="h-3 w-3 text-blue-500" />}
+                    {userToDelete.isTestUser && <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600">Test</Badge>}
+                    {userToDelete.isDummyUser && <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600">Dummy</Badge>}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {userToDelete.email} • {userToDelete.phoneNumber}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-red-800">This will permanently delete:</h4>
+                    <ul className="text-sm text-red-700 mt-1 space-y-1">
+                      <li>• User profile and all personal data</li>
+                      <li>• All uploaded photos and media</li>
+                      <li>• Chat messages and conversations</li>
+                      <li>• Matches and swipe history</li>
+                      <li>• Subscription and payment data</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={deletingUserId !== null}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => userToDelete && handleDeleteUser(userToDelete.id)}
+              disabled={deletingUserId !== null}
+            >
+              {deletingUserId === userToDelete?.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <UserX className="mr-2 h-4 w-4" />
+                  Delete User
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 
