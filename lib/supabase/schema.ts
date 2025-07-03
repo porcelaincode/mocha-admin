@@ -10,9 +10,9 @@ import {
   integer,
   jsonb,
   pgEnum,
+  index,
   real,
   unique,
-  index,
   check
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
@@ -86,7 +86,41 @@ export const onboardingSessions = pgTable("onboarding_sessions", {
   currentStep: varchar("current_step", { length: 50 }).notNull().default("basic_info"),
   progress: integer("progress").notNull().default(0),
   completedSteps: jsonb("completed_steps").notNull().default("[]"),
-  data: jsonb("data").notNull().default("{}"), // Store all onboarding data
+
+  // Basic Info fields
+  name: text("name"),
+  email: text("email"),
+  birthday: text("birthday"), // YYYY-MM-DD format
+  age: integer("age"),
+  occupation: text("occupation"),
+  bio: text("bio"),
+  bioQuestion: text("bio_question"),
+  location: text("location"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+
+  // Interests (keeping as jsonb for array of strings)
+  interests: jsonb("interests").default("[]"),
+
+  // Preferences (keeping as jsonb for complex object structure)
+  preferences: jsonb("preferences").default("{}"),
+
+  // Adult preferences
+  seductionStyle: seductionStyleEnum("seduction_style"),
+  flameLevel: flameLevelEnum("flame_level"),
+  fantasyTrigger: text("fantasy_trigger"),
+  powerPlayPreference: text("power_play_preference"),
+  topTurnOn: text("top_turn_on"),
+  kinkScore: integer("kink_score"),
+  idealSetting: text("ideal_setting"),
+  encounterFrequency: encounterFrequencyEnum("encounter_frequency"),
+  afterPassionUnwind: text("after_passion_unwind"),
+  spicyMediaComfort: spicyMediaComfortEnum("spicy_media_comfort"),
+  consentImportance: integer("consent_importance"),
+  midnightCraving: text("midnight_craving"),
+  riskTolerance: riskToleranceEnum("risk_tolerance"),
+  distancePreference: distancePreferenceEnum("distance_preference"),
+
   isComplete: boolean("is_complete").default(false).notNull(),
   createdAt: timestamp("created_at", { precision: 6, withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { precision: 6, withTimezone: true }).defaultNow().notNull(),
@@ -100,7 +134,10 @@ export const users = pgTable("users", {
   phoneNumber: text("phoneNumber").notNull().unique(), // phone number for authentication
   name: text("name"), // Optional full name
   age: integer("age"), // Age with minimum 18 constraint (check constraint will be added in migration)
+  birthday: text("birthday"), // Birthday in YYYY-MM-DD format
+  occupation: text("occupation"), // User's occupation/job
   bio: text("bio"), // Short user bio
+  bioQuestion: text("bio_question"), // The bio question the user selected/answered
   location: text("location"), // City or region (can be upgraded to GEOGRAPHY later)
   latitude: real("latitude"), // GPS latitude coordinate
   longitude: real("longitude"), // GPS longitude coordinate
@@ -142,11 +179,12 @@ export const users = pgTable("users", {
   likesCredits: integer("likes_credits").notNull().default(50),
   notesCredits: integer("notes_credits").notNull().default(3),
   chatRequestCredits: integer("chat_request_credits").notNull().default(7),
+  swipeCredits: integer("swipe_credits").notNull().default(50), // Daily swipe limit
 
   // Meta
   isTestUser: boolean("is_test_user").notNull().default(false),
   isDummyUser: boolean("is_dummy_user").notNull().default(false),
-  
+
   // Preferences
   preferences: jsonb("preferences")
     .notNull()
@@ -218,7 +256,9 @@ export const photos = pgTable("photos", {
 });
 
 // Swipes table to track user swipe actions
-export const swipes = pgTable("swipes", {
+export const swipes = pgTable(
+  "swipes",
+  {
     id: uuid("id").primaryKey().defaultRandom(),
     fromUserId: uuid("from_user_id")
       .notNull()
@@ -346,6 +386,54 @@ export const userFilters = pgTable("user_filters", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 
+// Swipe queue table for caching pre-computed profiles
+export const swipeQueue = pgTable(
+  "swipe_queue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    // Location context for this cached profile
+    userLatitude: real("user_latitude"),
+    userLongitude: real("user_longitude"),
+    locationHash: varchar("location_hash", { length: 64 }), // Hash of lat/lng for indexing
+
+    // Pre-computed profile data
+    profileData: jsonb("profile_data").notNull(), // Cached SwipeProfile object
+    compatibility: integer("compatibility").notNull(),
+    distance: real("distance"),
+
+    // Filter context when this was generated
+    filterHash: varchar("filter_hash", { length: 64 }).notNull(), // Hash of filters used
+
+    // Queue management
+    position: integer("position").notNull(), // Position in user's queue
+    isShown: boolean("is_shown").notNull().default(false),
+    shownAt: timestamp("shown_at", { withTimezone: true }),
+
+    // Expiry and freshness
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    // Composite indexes for efficient querying
+    userLocationIdx: index("swipe_queue_user_location_idx").on(table.userId, table.locationHash),
+    userFilterIdx: index("swipe_queue_user_filter_idx").on(table.userId, table.filterHash),
+    userPositionIdx: index("swipe_queue_user_position_idx").on(table.userId, table.position),
+    expiryIdx: index("swipe_queue_expiry_idx").on(table.expiresAt),
+    profileIdx: index("swipe_queue_profile_idx").on(table.profileId),
+
+    // Unique constraint to prevent duplicate profiles in same context
+    uniqueUserProfileLocation: unique().on(table.userId, table.profileId, table.locationHash, table.filterHash)
+  })
+);
+
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   photos: many(photos),
@@ -362,7 +450,9 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   userFilter: one(userFilters, {
     fields: [users.id],
     references: [userFilters.userId]
-  })
+  }),
+  swipeQueue: many(swipeQueue, { relationName: "swipeQueue" }),
+  queuedProfiles: many(swipeQueue, { relationName: "queuedProfile" })
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({
@@ -477,6 +567,19 @@ export const userFiltersRelations = relations(userFilters, ({ one }) => ({
   user: one(users, {
     fields: [userFilters.userId],
     references: [users.id]
+  })
+}));
+
+export const swipeQueueRelations = relations(swipeQueue, ({ one }) => ({
+  user: one(users, {
+    fields: [swipeQueue.userId],
+    references: [users.id],
+    relationName: "swipeQueue"
+  }),
+  profile: one(users, {
+    fields: [swipeQueue.profileId],
+    references: [users.id],
+    relationName: "queuedProfile"
   })
 }));
 
@@ -629,3 +732,11 @@ export const userFilterUpdateSchema = createUpdateSchema(userFilters) as unknown
 
 export type UserFilterInsertType = z.infer<typeof userFilterInsertSchema>;
 export type UserFilterSelectType = z.infer<typeof userFilterSelectSchema>;
+
+// Swipe queue schemas
+export const swipeQueueInsertSchema = createInsertSchema(swipeQueue) as unknown as z.ZodType<any>;
+export const swipeQueueSelectSchema = createSelectSchema(swipeQueue) as unknown as z.ZodType<any>;
+export const swipeQueueUpdateSchema = createUpdateSchema(swipeQueue) as unknown as z.ZodType<any>;
+
+export type SwipeQueueInsertType = z.infer<typeof swipeQueueInsertSchema>;
+export type SwipeQueueSelectType = z.infer<typeof swipeQueueSelectSchema>;

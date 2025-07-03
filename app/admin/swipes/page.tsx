@@ -23,7 +23,9 @@ import {
   getUsers,
   clearExpiredSwipes,
   getSwipeStats,
-  getUsersWithLowSwipeQueues
+  getUsersWithLowSwipeQueues,
+  removeSwipeQueueEntry,
+  reorderSwipeQueue
 } from "@/lib/admin-services";
 
 interface Swipe {
@@ -62,6 +64,20 @@ interface User {
   verified?: boolean;
 }
 
+interface SwipeQueueEntry {
+  id: string;
+  profileId: string;
+  profileData: any; // Should match the structure of cached SwipeProfile
+  compatibility: number;
+  distance: number;
+  position: number;
+  isShown: boolean;
+  shownAt?: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function SwipesPage() {
   const [swipes, setSwipes] = useState<Swipe[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -81,7 +97,7 @@ export default function SwipesPage() {
 
   // User queue management
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [userQueue, setUserQueue] = useState<Swipe[]>([]);
+  const [userQueue, setUserQueue] = useState<SwipeQueueEntry[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
 
   // Swipe generation
@@ -136,15 +152,13 @@ export default function SwipesPage() {
 
   const loadUserQueue = async (userId: string) => {
     if (!userId) return;
-    
     try {
       setQueueLoading(true);
       const result = await getSwipeQueueForUser(userId);
-      
       if (result.error) {
         setError(result.error);
       } else {
-        setUserQueue(result.swipes);
+        setUserQueue(result.queue);
       }
     } catch (err) {
       setError("Failed to load user queue");
@@ -353,6 +367,35 @@ export default function SwipesPage() {
   };
 
   const totalPages = Math.ceil(totalSwipes / itemsPerPage);
+
+  const handleRemoveQueueEntry = async (entryId: string) => {
+    if (!selectedUserId) return;
+    if (!confirm("Remove this profile from the queue?")) return;
+    const result = await removeSwipeQueueEntry(entryId);
+    if (result.success) {
+      setSuccess("Removed from queue");
+      loadUserQueue(selectedUserId);
+    } else {
+      setError(result.error || "Failed to remove from queue");
+    }
+  };
+
+  const handleReorderQueue = async (fromIdx: number, toIdx: number) => {
+    if (!selectedUserId) return;
+    if (fromIdx < 0 || toIdx < 0 || fromIdx >= userQueue.length || toIdx >= userQueue.length) return;
+    const newQueue = [...userQueue];
+    const [moved] = newQueue.splice(fromIdx, 1);
+    newQueue.splice(toIdx, 0, moved);
+    // Reassign positions
+    const newOrder = newQueue.map((entry, idx) => ({ id: entry.id, position: idx + 1 }));
+    const result = await reorderSwipeQueue(selectedUserId, newOrder);
+    if (result.success) {
+      setUserQueue(newQueue.map((entry, idx) => ({ ...entry, position: idx + 1 })));
+      setSuccess("Queue reordered");
+    } else {
+      setError(result.error || "Failed to reorder queue");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -726,7 +769,7 @@ export default function SwipesPage() {
             <CardHeader>
               <CardTitle>User Swipe Queue</CardTitle>
               <CardDescription>
-                View and manage the swipe queue for a specific user (max 5 swipes)
+                View and manage the swipe queue for a specific user (precomputed profiles)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -757,30 +800,9 @@ export default function SwipesPage() {
                 <>
                   <div className="flex justify-between items-center">
                     <div className="text-sm text-muted-foreground">
-                      Queue: {userQueue.length}/5 swipes
+                      Queue: {userQueue.length} profiles
                     </div>
                     <div className="flex gap-2">
-                      {userQueue.length > 0 && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={async () => {
-                            if (!confirm(`Clear all ${userQueue.length} swipes for this user?`)) return;
-                            try {
-                              const promises = userQueue.map(swipe => deleteSwipe(swipe.id));
-                              await Promise.all(promises);
-                              setSuccess(`Cleared all swipes for user`);
-                              loadUserQueue(selectedUserId);
-                              loadSwipes();
-                            } catch (err) {
-                              setError("Failed to clear swipes");
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Clear All
-                        </Button>
-                      )}
                       <Button
                         onClick={() => loadUserQueue(selectedUserId)}
                         variant="outline"
@@ -799,62 +821,69 @@ export default function SwipesPage() {
                     </div>
                   ) : userQueue.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
-                      No active swipes in queue for this user
+                      No profiles in swipe queue for this user
                     </div>
                   ) : (
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Target User</TableHead>
-                          <TableHead>Action</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Created</TableHead>
+                          <TableHead>Profile Name</TableHead>
+                          <TableHead>Compatibility</TableHead>
+                          <TableHead>Distance (mi)</TableHead>
+                          <TableHead>Position</TableHead>
+                          <TableHead>Shown?</TableHead>
+                          <TableHead>Expires At</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {userQueue.map((swipe) => (
-                          <TableRow key={swipe.id}>
+                        {userQueue.map((entry, idx) => (
+                          <TableRow key={entry.id}>
                             <TableCell>
-                              <div>
-                                <div className="font-medium">
-                                  {swipe.toUser?.name || "Unknown"}
-                                  {swipe.toUser?.verified && (
-                                    <Badge variant="outline" className="ml-2">Verified</Badge>
-                                  )}
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {swipe.toUser?.age && `Age: ${swipe.toUser.age} • `}
-                                  {swipe.toUser?.location}
-                                </div>
+                              <div className="font-medium">
+                                {entry.profileData?.name || entry.profileId}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {entry.profileData?.age && `Age: ${entry.profileData.age} • `}
+                                {entry.profileData?.location}
                               </div>
                             </TableCell>
-                            <TableCell>{getActionBadge(swipe.action)}</TableCell>
-                            <TableCell>{getStatusBadge(swipe.status)}</TableCell>
+                            <TableCell>{entry.compatibility}</TableCell>
+                            <TableCell>{entry.distance != null ? entry.distance.toFixed(1) : "-"}</TableCell>
+                            <TableCell>{entry.position}</TableCell>
                             <TableCell>
-                              {new Date(swipe.createdAt).toLocaleDateString()}
+                              {entry.isShown ? (
+                                <Badge variant="default" className="bg-blue-100 text-blue-800">Yes</Badge>
+                              ) : (
+                                <Badge variant="secondary">No</Badge>
+                              )}
                             </TableCell>
+                            <TableCell>{new Date(entry.expiresAt).toLocaleString()}</TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                <Select
-                                  value={swipe.status}
-                                  onValueChange={(value) => 
-                                    handleUpdateSwipeStatus(swipe.id, value as any)
-                                  }
-                                >
-                                  <SelectTrigger className="w-24">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="active">Active</SelectItem>
-                                    <SelectItem value="expired">Expired</SelectItem>
-                                    <SelectItem value="revoked">Revoked</SelectItem>
-                                  </SelectContent>
-                                </Select>
                                 <Button
                                   variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteSwipe(swipe.id)}
+                                  size="icon"
+                                  onClick={() => handleReorderQueue(idx, idx - 1)}
+                                  disabled={idx === 0}
+                                  title="Move up"
+                                >
+                                  ↑
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => handleReorderQueue(idx, idx + 1)}
+                                  disabled={idx === userQueue.length - 1}
+                                  title="Move down"
+                                >
+                                  ↓
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  onClick={() => handleRemoveQueueEntry(entry.id)}
+                                  title="Remove"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>

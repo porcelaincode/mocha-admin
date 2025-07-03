@@ -1495,29 +1495,41 @@ export async function getSwipeQueueForUser(userId: string) {
   const supabase = createClient();
   
   try {
+    // Fetch swipe queue entries for the user, ordered by position
     const { data, error } = await supabase
-      .from('swipes')
-      .select(`
-        *,
-        toUser:to_user_id(id, name, email, phoneNumber, age, bio, location, verified)
-      `)
-      .eq('from_user_id', userId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true });
+      .from('swipe_queue')
+      .select('*')
+      .eq('user_id', userId)
+      .order('position', { ascending: true });
 
     if (error) {
       console.error('Error fetching swipe queue:', error);
-      return { swipes: [], error: error.message };
+      return { queue: [], error: error.message };
     }
 
+    // Map queue entries to include profileData fields for easier frontend use
+    const queue = (data || []).map((entry: any) => ({
+      id: entry.id,
+      profileId: entry.profile_id,
+      profileData: entry.profile_data || {},
+      compatibility: entry.compatibility,
+      distance: entry.distance,
+      position: entry.position,
+      isShown: entry.is_shown,
+      shownAt: entry.shown_at,
+      expiresAt: entry.expires_at,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at
+    }));
+
     return {
-      swipes: data || [],
+      queue,
       error: null
     };
   } catch (error) {
     console.error('Error in getSwipeQueueForUser:', error);
     return {
-      swipes: [],
+      queue: [],
       error: 'Failed to fetch swipe queue'
     };
   }
@@ -2338,8 +2350,7 @@ export async function searchMessages(query: string, limit = 50) {
   try {
     const { data: messages, error } = await supabase
       .from('messages')
-      .select(`
-        *,
+      .select(`        *,
         sender:sender_id(id, name, email),
         conversation:conversation_id(
           id,
@@ -2849,8 +2860,7 @@ export async function getRevenueAnalytics(period: 'day' | 'week' | 'month' | 'ye
 
     const { data: previousPurchases } = await supabase
       .from('purchases')
-      .select(`
-        created_at,
+      .select(`        created_at,
         product:product_id(price, currency)
       `)
       .gte('created_at', previousStartDate.toISOString())
@@ -2930,8 +2940,7 @@ export async function getProductAnalytics() {
   try {
     const { data: purchases } = await supabase
       .from('purchases')
-      .select(`
-        product:product_id(id, name, price, currency, metadata)
+      .select(`        product:product_id(id, name, price, currency, metadata)
       `);
 
     const { data: subscriptions } = await supabase
@@ -2995,3 +3004,46 @@ export async function getProductAnalytics() {
 }
 
 // ... existing code ... 
+
+// Remove a queue entry by id
+export async function removeSwipeQueueEntry(entryId: string) {
+  const supabase = createClient();
+  try {
+    const { error } = await supabase
+      .from('swipe_queue')
+      .delete()
+      .eq('id', entryId);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to remove queue entry' };
+  }
+}
+
+// Reorder queue entries for a user
+export async function reorderSwipeQueue(userId: string, newOrder: {id: string, position: number}[]) {
+  const supabase = createClient();
+  try {
+    // Update each entry's position
+    const updates = await Promise.all(newOrder.map(async (entry) => {
+      const { error } = await supabase
+        .from('swipe_queue')
+        .update({ position: entry.position })
+        .eq('id', entry.id)
+        .eq('user_id', userId);
+      return error;
+    }));
+    const hasError = updates.some(e => e);
+    if (hasError) {
+      return { success: false, error: 'Failed to reorder some entries' };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: 'Failed to reorder queue' };
+  }
+}
+
+
+
